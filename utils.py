@@ -44,7 +44,7 @@ def create_datasets(tokenizer, data_args, training_args, apply_chat_template=Fal
         # dataset ini punya kolom 'messages', jadi kita gunakan langsung
         for conversation in samples["messages"]:
             batch.append(tokenizer.apply_chat_template(conversation, tokenize=False))
-        return {"content": batch}
+        return {"text": batch}
 
     raw_datasets = DatasetDict()
 
