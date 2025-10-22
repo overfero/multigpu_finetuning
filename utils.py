@@ -41,24 +41,28 @@ class ChatmlSpecialTokens(str, Enum):
 def create_datasets(tokenizer, data_args, training_args, apply_chat_template=False):
     def preprocess(samples):
         batch = []
-        for question, answer in zip(samples["question"], samples["answer"]):
-            conversation = [
-                {'role': 'user', 'content': question.strip()},
-                {'role': 'assistant', 'content': answer.strip()}
-            ]
+        # dataset ini punya kolom 'messages', jadi kita gunakan langsung
+        for conversation in samples["messages"]:
             batch.append(tokenizer.apply_chat_template(conversation, tokenize=False))
         return {"content": batch}
 
     raw_datasets = DatasetDict()
-    for split in data_args.splits.split(","):
-        try:
-            # Try first if dataset on a Hub repo
-            dataset = load_dataset(data_args.dataset_name, split=split.strip())
-        except DatasetGenerationError:
-            # If not, check local dataset
-            dataset = load_from_disk(os.path.join(data_args.dataset_name, split.strip()))
 
-        raw_datasets[split.strip()] = dataset
+    for split in data_args.splits.split(","):
+        split = split.strip()
+        try:
+            # coba load dari Hugging Face Hub
+            dataset = load_dataset(data_args.dataset_name, split=split)
+        except DatasetGenerationError:
+            # kalau tidak ada, load dari lokal
+            dataset = load_from_disk(os.path.join(data_args.dataset_name, split))
+
+        if "train" in split:
+            raw_datasets["train"] = dataset
+        elif "test" in split or "validation" in split:
+            raw_datasets["test"] = dataset
+        else:
+            raise ValueError(f"Split type ({split}) not recognized as one of test or train.")
 
     if apply_chat_template:
         raw_datasets = raw_datasets.map(
@@ -69,10 +73,15 @@ def create_datasets(tokenizer, data_args, training_args, apply_chat_template=Fal
 
     train_data = raw_datasets["train"]
     valid_data = raw_datasets.get("test", None)
+
+    # kalau tidak ada test split, otomatis bikin dari train
     if valid_data is None:
         raw_datasets = raw_datasets["train"].train_test_split(test_size=0.1)
         train_data = raw_datasets["train"]
         valid_data = raw_datasets["test"]
+
+    print(f"Size of the train set: {len(train_data)}. Size of the validation set: {len(valid_data)}")
+    print(f"A sample of train dataset: {train_data[0]}")
 
     return train_data, valid_data
 
